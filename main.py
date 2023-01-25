@@ -4,15 +4,62 @@ from bs4 import BeautifulSoup
 import string
 import time
 from urllib.parse import urljoin
+import random
 import urllib.request
 
 
-# TODO -- Define this function to scrap sex content from the provided url
-def scrape_KIM_sexcontent(url):
-    pass
+def scrape_kim_sexcontent(url):
+    # Request html from page and find all p elements
+    res = requests.get(url)
+    soup = BeautifulSoup(res.text, 'html.parser')
+    p_set = soup.findAll("p")
+
+    # TODO -- Add in a search for h2 id=sex and the paragraph just underneath it. Like --> https://kids-in-mind.com/b/beast-parents-guide-movie-review-rating.htm
+
+    res.close()
+
+    # Look for the sex content section and return it when found
+    sex_content = ""
+    for entry in p_set:
+        if 'SEX/NUDITY' in entry.text:
+            sex_content = entry.text
+            return sex_content
+
+    return sex_content
 
 
-def scrape_KIM_ratings():
+def parse_movie(movie):
+    # some entries had a foreign name in brackets
+    if movie.count("]") > 2:
+        start_idx = movie.find("]") + 1
+    else:
+        start_idx = 0
+
+    # year is usually in the first set of brackets
+    year_idx1 = movie.find("[", start_idx)
+    year_idx2 = movie.find("]", start_idx)
+
+    # mpaa rating was next
+    mpaa_idx1 = movie.find("[", year_idx1 + 1)
+    mpaa_idx2 = movie.find("]", year_idx2 + 1)
+
+    year = int(movie[year_idx1 + 1:year_idx2].strip())
+    mpaa = movie[mpaa_idx1 + 1:mpaa_idx2]
+
+    # the ratings came after a dash and were formatted like #.#.#
+    ratings_split = movie.split("–")
+    # sometimes they used a dash, sometimes an en dash
+    if len(ratings_split) == 1:
+        ratings_split = movie.split("-")
+
+    ratings = [int(x) for x in ratings_split[-1].split(".")]
+
+    title = movie[0:year_idx1]
+
+    return year, mpaa, ratings, title
+
+
+def scrape_kim_ratings(letters):
     movie_dict = {"title": [],
                   "year": [],
                   "mpaa": [],
@@ -21,7 +68,7 @@ def scrape_KIM_ratings():
                   "KIM language": [],
                   "KIM sex content": []}
 
-    for letter in string.ascii_lowercase:
+    for letter in letters:
         # Get a response from each letter page
         url = f"https://kids-in-mind.com/{letter}.htm"
         res = requests.get(url)
@@ -43,6 +90,7 @@ def scrape_KIM_ratings():
 
             # All movies on the page, separated by /n (movie names with ratings are stored as text of the div element)
             movies = div[idx].getText().split("\n")
+
             # href links to each movie page are stored in a elements
             a = div[idx].findAll("a")
             links = [urljoin(url, x["href"]) for x in a]
@@ -51,48 +99,31 @@ def scrape_KIM_ratings():
             movies_and_links = list(zip(movies, links))
 
             for movie, link in movies_and_links:
+                # get the information available in the list on each letter page
+                year, mpaa, ratings, title = parse_movie(movie)
 
-                # TODO -- define a function to process movie
-                # TODO -- define a function to go to the link and get the sex content
+                # follow each movie link to get the sex content description
+                start = time.time()
+                sex_content = scrape_kim_sexcontent(link)
+                delay = time.time() - start
 
-                # some entries had a foreign name in brackets
-                if movie.count("]") > 2:
-                    start_idx = movie.find("]") + 1
-                else:
-                    start_idx = 0
+                wait_time = random.uniform(.5, 2) * delay
+                print(f'Just finished{title}')
+                print(f'wait time is {wait_time}')
 
-                # year is usually in the first set of brackets
-                year_idx1 = movie.find("[", start_idx)
-                year_idx2 = movie.find("]", start_idx)
-
-                # mpaa rating was next
-                mpaa_idx1 = movie.find("[", year_idx1 + 1)
-                mpaa_idx2 = movie.find("]", year_idx2 + 1)
-
-                year = int(movie[year_idx1 + 1:year_idx2].strip())
-                mpaa = movie[mpaa_idx1 + 1:mpaa_idx2]
-
-                # the ratings came after a dash and were formatted like #.#.#
-                ratings_split = movie.split("–")
-                # sometimes they used a dash, sometimes an en dash
-                if len(ratings_split) == 1:
-                    ratings_split = movie.split("-")
-
-                ratings = [int(x) for x in ratings_split[-1].split(".")]
-
-                title = movie[0:year_idx1]
-
+                # Build dictionary for conversion to data frame
                 movie_dict["title"].append(title)
                 movie_dict["year"].append(year)
                 movie_dict["mpaa"].append(mpaa)
                 movie_dict["KIM sex"].append(ratings[0])
                 movie_dict["KIM violence"].append(ratings[1])
                 movie_dict["KIM language"].append(ratings[2])
+                movie_dict["KIM sex content"].append(sex_content)
 
             res.close()
 
-            print(f"Done with {letter}. Waiting 0.5 second")
-            time.sleep(0.5)
+            print(f"Done with {letter}. Waiting {wait_time} seconds")
+            time.sleep(wait_time)
 
         else:
             print(f"Error: {res}")
@@ -101,5 +132,7 @@ def scrape_KIM_ratings():
 
     df_movies.to_csv("Movies.csv")
 
+    return df_movies
 
-scrape_KIM_ratings()
+
+df_movies = scrape_kim_ratings(string.ascii_lowercase[0:2])
