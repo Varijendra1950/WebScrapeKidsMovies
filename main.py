@@ -1,6 +1,7 @@
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import bs4.element
 import string
 import time
 from urllib.parse import urljoin
@@ -12,18 +13,33 @@ def scrape_kim_sexcontent(url):
     # Request html from page and find all p elements
     res = requests.get(url)
     soup = BeautifulSoup(res.text, 'html.parser')
-    p_set = soup.findAll("p")
-
-    # TODO -- Add in a search for h2 id=sex and the paragraph just underneath it. Like --> https://kids-in-mind.com/b/beast-parents-guide-movie-review-rating.htm
-
     res.close()
+    h2_set = soup.findAll("h2")
 
-    # Look for the sex content section and return it when found
+    # Initialize
     sex_content = ""
-    for entry in p_set:
-        if 'SEX/NUDITY' in entry.text:
-            sex_content = entry.text
-            return sex_content
+
+    # Check the <h2> tags (headers). If you find id="sex", grab the next paragraph (p tag)
+    sibling_iter = []
+    for entry in h2_set:
+        if "id" in entry.attrs:
+            if entry["id"] == "sex":
+                sibling_iter = entry.next_siblings
+
+                # Grab the next paragraph
+                for sibling in sibling_iter:
+                    if type(sibling) == bs4.element.Tag:
+                        sex_content = sibling.text
+
+    # Sometimes header <h2> tags aren't used to make the paragraph headers
+    # If you haven't found sex content yet, search all the p tags for "SEX/NUDITY"
+    if sex_content == "":
+        p_set = soup.findAll("p")
+
+        for entry in p_set:
+            if 'SEX/NUDITY' in entry.text:
+                sex_content = entry.text
+                break
 
     return sex_content
 
@@ -101,6 +117,7 @@ def scrape_kim_ratings(letters):
             for movie, link in movies_and_links:
                 # get the information available in the list on each letter page
                 year, mpaa, ratings, title = parse_movie(movie)
+                print(f"Title is {title}")
 
                 # follow each movie link to get the sex content description
                 start = time.time()
@@ -108,8 +125,9 @@ def scrape_kim_ratings(letters):
                 delay = time.time() - start
 
                 wait_time = random.uniform(.5, 2) * delay
-                print(f'Just finished{title}')
+                print(f'Just finished {title}')
                 print(f'wait time is {wait_time}')
+                time.sleep(wait_time)
 
                 # Build dictionary for conversion to data frame
                 movie_dict["title"].append(title)
@@ -122,17 +140,19 @@ def scrape_kim_ratings(letters):
 
             res.close()
 
+            # Write to the CSV after every letter
+            print("\n")
+            print("Writing to Movies.csv")
+            df_movies = pd.DataFrame(movie_dict)
+            df_movies.to_csv("Movies.csv")
+
             print(f"Done with {letter}. Waiting {wait_time} seconds")
             time.sleep(wait_time)
 
         else:
             print(f"Error: {res}")
 
-    df_movies = pd.DataFrame(movie_dict)
-
-    df_movies.to_csv("Movies.csv")
-
     return df_movies
 
 
-df_movies = scrape_kim_ratings(string.ascii_lowercase[0:2])
+df_movies = scrape_kim_ratings(string.ascii_lowercase)
