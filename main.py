@@ -6,11 +6,10 @@ import string
 import time
 from urllib.parse import urljoin
 import random
-import urllib.request
 
 
 def scrape_kim_sexcontent(url):
-    # Request html from page and find all p elements
+    # Request html from page and find all h2 tags
     res = requests.get(url)
     soup = BeautifulSoup(res.text, 'html.parser')
     res.close()
@@ -92,7 +91,7 @@ def scrape_kim_ratings(letters):
         if res:
             # Get the HTML from that page
             soup = BeautifulSoup(res.text, "html.parser")
-            # The list of movies is in a div element with class = et_pb_text_inner
+            # The list of movies is in a div tag with class = et_pb_text_inner
             div = soup.findAll("div", class_="et_pb_text_inner")
 
             # Find the list of movies. It comes after "Movie Reviews by Title"
@@ -104,10 +103,10 @@ def scrape_kim_ratings(letters):
                     break
                 idx += 1
 
-            # All movies on the page, separated by /n (movie names with ratings are stored as text of the div element)
+            # All movies on the page, separated by \n (movie names with ratings are stored as text of the div tag)
             movies = div[idx].getText().split("\n")
 
-            # href links to each movie page are stored in a elements
+            # href links to each movie page are stored in a tags
             a = div[idx].findAll("a")
             links = [urljoin(url, x["href"]) for x in a]
 
